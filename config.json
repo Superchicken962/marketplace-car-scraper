@@ -1,0 +1,8 @@
+{
+    "scrapeUrl": "https://www.facebook.com/marketplace/adelaide/vehicles?maxPrice=12000&maxYear=2012&minYear=2004&sortBy=creation_time_descend&make=391196981458827&exact=false",
+    "webhooks": {
+        "listings": ""
+    },
+    "showTimers": true,
+    "production": false
+}
