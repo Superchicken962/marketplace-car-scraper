@@ -221,7 +221,7 @@ function getListings() {
     });
 
     // Save data to file
-    fs.writeFileSync(listings_path, JSON.stringify(formatListingsForSave(listings)), "utf-8");
+    fs.writeFileSync(listings_path, JSON.stringify(formatListingsForSave(listings, saved_listings)), "utf-8");
 
     // Set hours to 3 hours in future.
     dateToRestart.setHours(dateToRestart.getHours() + 3);
@@ -237,16 +237,15 @@ function wait(ms) {
 /**
  * Format listings array into object where URLs are the keys.
  * @param { Array } listings Array of listings
+ * @param { Object? } saved_listings - Existing listings object for new listings to be added to (optional).
  * @returns { Object } Formatted object
  */
-function formatListingsForSave(listings) {
-    const obj = {};
-
+function formatListingsForSave(listings, saved_listings = {}) {
     for (const listing of listings) {
-        obj[listing.url] = listing;
+        saved_listings[listing.url] = listing;
     }
 
-    return obj;
+    return saved_listings;
 }
 
 function displayRestartTimer() {
