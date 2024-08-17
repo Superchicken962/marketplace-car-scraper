@@ -12,6 +12,7 @@ Script to fetch car listings from Facebook marketplace URL(s)
 
 > [!NOTE]
 > Tested and works well on Windows 10. Tested on Ubuntu, but did not work as facebook wants it to sign in.  
+> Feel free to fork/clone and add your own features & changes!
 
 ## Usage
 1. Open command prompt/terminal and go to the directory with `index.js`
@@ -52,4 +53,4 @@ There are a few configurations you can make to the script. Possible configuratio
 - `endImmediately : bool` - If `restartOnComplete` is disabled, then setting this to `true` will end the process as soon as the fetch is complete rather than waiting.
 
 > [!TIP]
-> Feel free to fork/clone and add your own features & changes!
+> Add sort filter on marketplace to sort by newest listings, and also add a few URLs for the script to scrape for maximum results!
