@@ -4,6 +4,8 @@ Script to fetch car listings from Facebook marketplace URL(s)
 > [!WARNING]
 > No longer maintained by me as I do not need to use it anymore.
 
+Feel free to fork/clone and add your own changes & fixes!
+
 ## Installation
 1. Ensure you have [Node.js](https://nodejs.org/en) installed - tested on v20.9.0
 2. Download source code from github
@@ -12,7 +14,6 @@ Script to fetch car listings from Facebook marketplace URL(s)
 
 > [!NOTE]
 > Tested and works well on Windows 10. Tested on Ubuntu, but did not work as facebook wants it to sign in.  
-> Feel free to fork/clone and add your own features & changes!
 
 ## Usage
 1. Open command prompt/terminal and go to the directory with `index.js`
