@@ -1,6 +1,33 @@
 {
   "dependencies": {
+    "axios": "^1.7.2",
+    "express": "^4.19.2",
+    "fb-marketplace-auto-fetch-car-listings": "file:",
+    "marketplace-car-scraper": "file:",
     "puppeteer": "^22.12.1",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "requestretry": "^7.1.0"
-  }
+  },
+  "name": "marketplace-car-scraper",
+  "version": "1.1.0",
+  "description": "scrape car listings from fb marketplace + basic visual dashboard to see listings",
+  "main": "index.js",
+  "scripts": {
+    "test": "node index.js"
+  },
+  "author": "Mark Gurney",
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Superchicken962/marketplace-car-scraper.git"
+  },
+  "keywords": [
+    "car",
+    "marketplace"
+  ],
+  "bugs": {
+    "url": "https://github.com/Superchicken962/marketplace-car-scraper/issues"
+  },
+  "homepage": "https://github.com/Superchicken962/marketplace-car-scraper#readme"
 }

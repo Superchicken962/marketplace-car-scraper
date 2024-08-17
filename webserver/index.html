@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Marketplace Listings Summary</title>
+    <style>
+        body {
+            background-color: rgb(31,31,31);
+            color: white;
+            font-family: monospace;
+        }
+        h1 {
+            font-size: 36px;
+            font-weight: bold;
+            text-shadow: 2px 2px black;
+            text-align: center;
+        }
+        h2 {
+            text-align: center;
+        }
+        .listings {
+            display: grid;
+            grid-template-columns: auto auto auto auto;
+            gap: 30px;
+            margin: auto;
+            width: fit-content;
+            height: fit-content;
+            min-height: 500px;
+            padding: 8px 32px;
+            background-color: rgb(25, 50, 110);
+            box-shadow: 10px 10px 0 rgb(15, 30, 70);
+            border-radius: 10px;
+        }
+        .listings .carListing {
+            display: inline-block;
+            position: relative;
+            min-width: 300px;
+            background-color: rgba(0,0,0,0.5);
+            border-radius: 10px;
+            overflow: hidden;
+
+            color: white;
+            text-decoration: none;
+            transition: 0.3s ease-in-out opacity, 0.5s ease-in-out filter;
+        }
+        .listings .carListing:hover {
+            opacity: 0.5;
+            cursor: pointer;
+        }
+        .listings .carListing.notSelected {
+            filter: blur(10px);
+        }
+        .listings .carListing img {
+            display: block;
+            float: left;
+            width: 125px;
+            pointer-events: none;
+        }
+        .listings .carListing p {
+            margin-left: 140px;
+            pointer-events: none;
+        }
+        .listings .carListing .footer {
+            display: block;
+            margin: auto;
+            position: absolute;
+            right: 10px;
+            bottom: 5px;
+            color: grey;
+            pointer-events: none;
+        }
+
+        .listings .carListing .price {
+            display: block;
+            margin: auto;
+            position: absolute;
+            width: fit-content;
+            height: fit-content;
+            top:0;bottom:0;
+            left:125px; right:0;
+            font-size: 20px;
+            pointer-events: none;
+        }
+
+        .listings .carListing .new_tag {
+            display: inline-block;
+            padding: 1px 4px;
+            background-color: red;
+            color: white;
+        }
+
+        h2 .delete_info {
+            display: none;
+            font-size: 16px;
+            color: red;
+        }
+
+        .listings_warning {
+            color: gold;
+        }
+
+        .remove_all_invalid {
+            font-size: 14px;
+            color: red;
+            text-decoration: underline dashed;
+            text-underline-offset: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>Marketplace Listings Summary</h1>
+    <h2><span class="total_listing_count">0</span> Total Listings</h2>
+    <h2 class="listings_warning"></h2>
+    <h2><span class="disabled_count">0</span> Disabled Listings (Right-click to disable)<span class="delete_info">Press DEL to remove disabled listings from page.</span></h2>
+
+    <div class="listings">
+
+    </div>
+</body>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.30.1/moment-with-locales.min.js" integrity="sha512-4F1cxYdMiAW98oomSLaygEwmCnIP38pb4Kx70yQYqRwLVCs3DbRumfBq82T08g/4LJ/smbFGFpmeFlQgoDccgg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script>
+    (async() => {
+        try {
+            const get = await fetch("/get/data");
+
+            if (get.status !== 200) {
+                throw new Error(get.statusText);
+            }
+
+            const data = await get.json();
+
+            // Order by 'lastChecked' - last time it was seen by scraping tool.
+            const sortedData = Object.values(data).sort((a,b) => b.lastChecked - a.lastChecked);
+
+            for (const listing of sortedData) {
+                setListingHTML(listing);
+            }
+
+            checkDataValidity(sortedData);
+
+        } catch (error) {
+            document.querySelector(".listings").innerHTML = `<h1 class='error'>Error fetching data:</h1><h2>${error}</h2>`;
+        }
+    })();
+
+    function setListingHTML(listing_data) {
+        console.log(listing_data);
+
+        const listOfListings = document.querySelector(".listings");
+        
+        const element = document.createElement("a");
+        element.className = "carListing";
+        element.setAttribute("href", listing_data.url);
+        element.setAttribute("target", "_blank");
+
+        // 'NEW' is no more than 24 hours old
+        const isNewListing = (Date.now() - listing_data.lastChecked)/1000/60/60 < 24;
+
+        element.innerHTML = `
+            <img src="${listing_data.imageUrl}" onerror="removeInvalidListing(this);updateListingsCount();"/>
+            <p>
+                <span class="name">${listing_data.name}</span> ${(isNewListing) ? `<span class="new_tag" title="${moment(listing_data.lastChecked).fromNow}">NEW</span>` : ""}
+
+                <span class="price">${(listing_data.price.old ? `$${listing_data.price.old} => $${listing_data.price.current}` : '$'+listing_data.price.current)}</span>
+
+                <span class="footer">
+                    Last seen ${moment(listing_data.lastChecked).fromNow()} • ${listing_data.kilometers}
+                </span>
+            </p>
+        `;
+
+        // 'Disable' listing when right clicked.
+        element.addEventListener("contextmenu", (event) => {
+            event.preventDefault();
+
+            event.target.classList.toggle("notSelected");
+            updateDisabledCount();
+        });
+
+        // If the listing has been 'disabled' then do not open it if clicked.
+        element.addEventListener("click", (event) => {
+            if (event.target.classList.contains("notSelected")) {
+                event.preventDefault();
+            }
+        });
+
+        listOfListings.appendChild(element);
+        updateListingsCount();
+    }
+
+    function updateDisabledCount() {
+        const countElement = document.querySelector(".disabled_count");
+        const delInfo = document.querySelector(".delete_info");
+        const disabledCount = document.querySelectorAll(".notSelected").length;
+
+        if (disabledCount > 0) {
+            delInfo.style.display = "block";
+        } else {
+            delInfo.style.display = "none";
+        }
+
+        countElement.textContent = disabledCount;
+        updateListingsCount();
+    }
+
+    function removeAllDisabledListings() {
+        const disabledElements = document.querySelectorAll(".notSelected");
+
+        // Remove all elements marked as disabled, and call function to update count again.
+        disabledElements.forEach(element => element.remove());
+        updateDisabledCount();
+    }
+
+    function updateListingsCount() {
+        const listingsCount = document.querySelectorAll(".listings .carListing").length;
+        document.querySelector(".total_listing_count").textContent = listingsCount;
+    }
+
+    window.addEventListener("keydown", (event) => {
+        if (event.key.toLowerCase() === "delete") {
+            removeAllDisabledListings();
+        }
+    });
+
+    let invalidListings = 0;
+
+    // Check if the listing is valid - if a lastChecked value is not provided, or if the image does not load then it is likely invalid.
+    async function checkDataValidity(data = []) {
+        const warningElement = document.querySelector(".listings_warning");
+
+        for (const listing of data) {
+            if (!listing.lastChecked) {
+                invalidListings++;
+                continue;
+            };
+
+        }
+
+        if (invalidListings > 0) {
+            warningElement.innerHTML = invalidListings+" Invalid listings! This is likely due to them being unlisted. <a class='remove_all_invalid'>Remove all invalid</a>";
+            warningElement.querySelector(".remove_all_invalid").onclick = async() => {
+                const del = await fetch("/listings/invalid/all", {"method": "DELETE"});
+                if (del.status !== 200) {
+                    alert(`Unable to remove invalid listings!\n\nError ${del.status}: ${del.statusText}`);
+                    return;
+                }
+
+                window.location.reload();
+            }
+        }
+    }
+
+    function removeInvalidListing(element) {
+        element.parentNode.remove();
+        invalidListings++;
+        
+        // Call without passing any paramters to just update invalid count.
+        checkDataValidity();
+    }
+</script>
+</html>

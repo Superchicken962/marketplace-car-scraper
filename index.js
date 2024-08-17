@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const config = require("./config.json");
 
-const scrapeUrl = config.scrapeUrl;
+const scrapeUrls = config.scrapeURLs;
 
 // Date will be changed at end to be 3 hours ahead of current time, which is when process will end to be auto restarted.
 const dateToRestart = new Date();
@@ -19,106 +19,130 @@ function getListings() {
             ]
         };
 
-        // If on production, set the executable path to chromium browser as we're using linux on production server.
-        if (config.production) launchSettings.executablePath = "/usr/bin/chromium-browser";
+        // If a custom browser path is set, make puppeteer use it.
+        if (!!config.customBrowserPath) launchSettings.executablePath = config.customBrowserPath;
 
         const browser = await puppeteer.launch(launchSettings);
 
         const page = await browser.newPage();
+        
+        console.log("Beginning scraping process...");
 
-        await page.goto(scrapeUrl, {
-            waitUntil: "domcontentloaded",
-            timeout: 30000,
-        });
+        const allListings = [];
 
-        console.log("Scraping site...");
+        let atUrl = 1;
+        for (const url of scrapeUrls) {
+            console.log(`[${atUrl}/${scrapeUrls.length}] Scraping URL '${url}'`);
 
-        await page.waitForSelector("#seo_pivots");
+            await page.goto(url, {
+                waitUntil: "networkidle2",
+                timeout: 30000,
+            });
 
-        const carListings = await page.evaluate(async() => {
-            function wait(ms) {
-                return new Promise((resolve) => {
-                    setTimeout(resolve, ms);
-                });
-            }
+            // Take screenshot if enabled in config.
+            if (config.saveScreenshots) await page.screenshot({"path": `URL_${atUrl}_Start.png`});
 
-            let carElements = document.querySelector("#seo_pivots").nextSibling.nextSibling.nextSibling.children[0].children[1].querySelectorAll("a");
-            
-            // Give up to 5 tries of checking for new elements, then continue on.
-            let tries = 0;
-            const maxTries = 5;
-            let lastCheckedElementLength = carElements.length;
-            
-            // Find the close button that shows on the "see more by logging in" popup, and click it if it is found.
-            document.querySelector("div[aria-label='Close']")?.click();
+            await page.waitForSelector("#seo_pivots");
 
-            // 64 should be the most we will find on a page, so we keep trying until we get there or we reach the max attempts.
-            while (tries < maxTries && carElements.length <= 64) {
+            const scrapedCarListings = await page.evaluate(async() => {
+                function wait(ms) {
+                    return new Promise((resolve) => {
+                        setTimeout(resolve, ms);
+                    });
+                }
+
+                let carElements = document.querySelector("#seo_pivots").nextSibling.nextSibling.nextSibling.children[0].children[1].querySelectorAll("a");
+                
+                // Give up to 5 tries of checking for new elements, then continue on.
+                let tries = 0;
+                const maxTries = 5;
+                let lastCheckedElementLength = carElements.length;
+                
+                // Find the close button that shows on the "see more by logging in" popup, and click it if it is found.
+                document.querySelector("div[aria-label='Close']")?.click();
+
+                // 64 should be the most we will find on a page, so we keep trying until we get there or we reach the max attempts.
+                while (tries < maxTries && carElements.length <= 64) {
+                    carElements = document.querySelector("#seo_pivots").nextSibling.nextSibling.nextSibling.children[0].children[1].querySelectorAll("a");
+
+                    // Scroll to the bottom of the page to let more cars load in.
+                    window.scroll(0, 50000);
+
+                    // Just wait a second to let cars load in before scrolling again.
+                    await wait(1000);
+
+                    lastCheckedElementLength = carElements.length;
+
+                    // If the length is the same again, increment the number of tries so that eventually if the length is the same for a while, it just gives up and returns the amount.
+                    if (carElements.length === lastCheckedElementLength) {
+                        tries++;
+                    }
+                }
+
                 carElements = document.querySelector("#seo_pivots").nextSibling.nextSibling.nextSibling.children[0].children[1].querySelectorAll("a");
 
-                // Scroll to the bottom of the page to let more cars load in.
-                window.scroll(0, 50000);
+                const carsList = [];
 
-                // Just wait a second to let cars load in before scrolling again.
-                await wait(1000);
+                for (const linkElement of carElements) {
+                    // Remove the mess of query variables that is in facebook URLs.
+                    let url = linkElement.href.split("?")[0];
 
-                lastCheckedElementLength = carElements.length;
+                    let info = linkElement.children[0].children[1];
 
-                // If the length is the same again, increment the number of tries so that eventually if the length is the same for a while, it just gives up and returns the amount.
-                if (carElements.length === lastCheckedElementLength) {
-                    tries++;
+                    let price = info.children[0].textContent.split("AU$");
+                    let name = info.children[1].textContent;
+                    let location = info.children[2].textContent;
+                    let kilometers = info.children[3].textContent;
+
+                    let imageUrl = linkElement.children[0].children[0].querySelector("img").src;
+
+                    price.shift();
+
+                    const carInfo = {
+                        price: {
+                            old: price[1],
+                            current: price[0]
+                        },
+                        name, 
+                        location, 
+                        kilometers, 
+                        url,
+                        imageUrl
+                    };
+                    carsList.push(carInfo);
                 }
+
+                return carsList;
+            });
+
+            // Take screenshot if enabled in config.
+            if (config.saveScreenshots) await page.screenshot({"path": `URL_${atUrl}_End.png`});
+
+            // Add listings from page to main array, if it is not a duplicate.
+            for (const scrapedListing of scrapedCarListings) {
+                // If the same URL is found in the main array, do not add.
+                if (allListings.find(listing => listing.url === scrapedListing.url)) continue;
+
+                allListings.push(scrapedListing);
             }
 
-            carElements = document.querySelector("#seo_pivots").nextSibling.nextSibling.nextSibling.children[0].children[1].querySelectorAll("a");
-
-            const carsList = [];
-
-            for (const linkElement of carElements) {
-                // Remove the mess of query variables that is in facebook URLs.
-                let url = linkElement.href.split("?")[0];
-
-                let info = linkElement.children[0].children[1];
-
-                let price = info.children[0].textContent.split("AU$");
-                let name = info.children[1].textContent;
-                let location = info.children[2].textContent;
-                let kilometers = info.children[3].textContent;
-
-                let imageUrl = linkElement.children[0].children[0].querySelector("img").src;
-
-                price.shift();
-
-                const carInfo = {
-                    price: {
-                        old: price[1],
-                        current: price[0]
-                    },
-                    name, 
-                    location, 
-                    kilometers, 
-                    url,
-                    imageUrl
-                };
-                carsList.push(carInfo);
-            }
-
-            return carsList;
-        });
-
-        // await page.screenshot({"path": "test.png"})
+            atUrl += 1;
+        }
 
         await page.close();
         await browser.close();
 
         console.log("Scraping complete.");
 
-        resolve(carListings);
+        resolve(allListings);
     });
 }
 
+let restartInterval = null;
+async function Main() {
+    // Clear interval if it has been set - handle script reruns.
+    if (restartInterval) clearInterval(restartInterval);
 
-(async() => {
     const listings = await getListings();
     let completionMessage = "Update complete.";
 
@@ -141,6 +165,7 @@ function getListings() {
         // If the listing has already been saved (sent to discord previously), and the prices haven't changed then do not send the webhook as nothing has changed or updated.
         if (saved_listings[listing.url] && saved_listings[listing.url].price.current === listing.price.current) {
             listingNum++; // Increment just to add progress.
+            listing["lastChecked"] = Date.now();
             continue;
         };
 
@@ -201,6 +226,7 @@ function getListings() {
             resolve();
         });
 
+        listing["lastChecked"] = Date.now();
         requestsMade++;
     }
 
@@ -224,9 +250,10 @@ function getListings() {
     fs.writeFileSync(listings_path, JSON.stringify(formatListingsForSave(listings, saved_listings)), "utf-8");
 
     // Set hours to 3 hours in future.
-    dateToRestart.setHours(dateToRestart.getHours() + 3);
-    setInterval(displayRestartTimer, 1000);
-})();
+    dateToRestart.setMinutes(dateToRestart.getMinutes() + config.checkInterval);
+    restartInterval = setInterval(displayRestartTimer, 1000);
+}
+Main();
 
 function wait(ms) {
     return new Promise((resolve) => {
@@ -250,15 +277,24 @@ function formatListingsForSave(listings, saved_listings = {}) {
 
 function displayRestartTimer() {
     const timeDiff = dateToRestart.getTime() - Date.now();
+
+    // End process immediately after completion if configured.
+    if (!config.restartOnComplete && config.endImmediately) process.exit(0);
     
     // Only show timer and logs every interval is enabled in config.
     if (config.showTimers) {
         console.clear();
-        console.log("Scraping & logging complete. Ending process in 3 hours.");
+        console.log(`Scraping & logging complete. ${(config.restartOnComplete) ? "Restarting script" : "Ending process"} in ${config.checkInterval} minutes.`);
         console.log(`Restarts in: ${("0"+Math.floor(timeDiff/1000/60/60)).slice(-2)}:${("0"+Math.floor(timeDiff/1000/60)%60).slice(-2)}:${("0"+Math.floor(timeDiff/1000)%60).slice(-2)}`);
-        console.log("\nProcess should ideally restart after this ends.");
+        // Display different message depending on whether the script restarts within the process, or if the process ends.
+        console.log((config.restartOnComplete) ? "Script will keep running until an error occurs, or is manually closed." : "\nProcess will exit after this ends. It is recommended that a batch file (or similar) restarts the script when it exits.");
     }
 
-    // When the 3 hours has passed, exit the process.
-    if (timeDiff <= 0) process.exit(0);
+    // When the 3 hours has passed, exit process (or rerun script).
+    if (timeDiff <= 0) {
+        // Don't worry about an 'else' statement, since the process exits so it won run anyway.
+        if (!config.restartOnComplete) process.exit(0);
+
+        Main();
+    }
 }
